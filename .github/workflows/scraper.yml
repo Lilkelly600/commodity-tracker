@@ -1,0 +1,32 @@
+name: Refresh Market Commodity Prices
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Triggers automatically every day at midnight
+  workflow_dispatch: # Allows manual run at any time via a button click
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out codebase
+      uses: actions/checkout@v4
+
+    - name: Set up Python environment
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Scraping Tools
+      run: pip install requests beautifulsoup4
+
+    - name: Extract Live Prices
+      run: python fetch_prices.py
+
+    - name: Commit and Save Updated Prices
+      run: |
+        git config --global user.name "Market Price Bot"
+        git config --global user.email "bot@github.com"
+        git add prices.json
+        git commit -m "Automated update of Lagos & International market rates" || exit 0
+        git push
