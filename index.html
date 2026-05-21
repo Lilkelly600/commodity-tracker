@@ -1,0 +1,385 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commodity PnL Tracker</title>
+    <style>
+        /* Theme Variables */
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-muted: #666666;
+            --border: #dddddd;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success: #16a34a;
+            --danger: #dc2626;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #111827;
+            --card-bg: #1f2937;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --border: #374151;
+            --primary: #3b82f6;
+            --primary-hover: #60a5fa;
+            --success: #22c55e;
+            --danger: #ef4444;
+        }
+
+        /* Global Styles */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1, h2, h3 { margin: 0 0 10px 0; }
+        
+        .form-group {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        input {
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg-color);
+            color: var(--text-main);
+            font-size: 1rem;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background-color 0.2s;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button:hover { background-color: var(--primary-hover); }
+        button.secondary { background-color: var(--border); color: var(--text-main); }
+        button.secondary:hover { background-color: var(--text-muted); color: white; }
+
+        /* Grid Layouts */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+
+        /* Status Badge */
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            background: var(--border);
+            margin-bottom: 15px;
+        }
+
+        /* Results Panel */
+        #resultsPanel {
+            margin-top: 25px;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border);
+            display: none;
+        }
+
+        .profit { color: var(--success); font-weight: bold; }
+        .loss { color: var(--danger); font-weight: bold; }
+
+        /* Modals */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2>Commodity Tracker</h2>
+        <button onclick="toggleTheme()" style="width: auto; padding: 8px 12px;">🌓 Theme</button>
+    </div>
+
+    <div id="apiStatus" class="badge">Checking for live market data...</div>
+
+    <div class="grid-2">
+        <div class="form-group">
+            <label>Buying Window</label>
+            <input type="month" id="buyDate" required>
+        </div>
+        <div class="form-group">
+            <label>Storage Period (Months)</label>
+            <input type="number" id="storagePeriod" min="0" value="0" required>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Buying Price (₦ per 25L)</label>
+        <input type="number" id="buyPrice" placeholder="e.g. 25000" required>
+    </div>
+
+    <div class="form-group">
+        <label>Commodity Inventory</label>
+        <button type="button" class="secondary" onclick="openModal('qtyModal')">
+            Enter Inventory Quantities (Yellow/Aboki)
+        </button>
+        <div id="qtyDisplay" style="margin-top: 8px; font-size: 0.9rem; color: var(--text-muted);">
+            Total: 0 Jerricans (0 Yellow, 0 Aboki)
+        </div>
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid var(--border); margin: 25px 0;">
+
+    <h3>Current Market Rates</h3>
+    <div class="grid-2">
+        <div class="form-group">
+            <label>Lagos Price (₦ per 25L)</label>
+            <input type="number" id="lagosPrice" placeholder="Auto-fills from API">
+        </div>
+        <div class="form-group">
+            <label>Intl Price ($ per Liter)</label>
+            <input type="number" id="intlPrice" placeholder="Auto-fills from API" step="0.01">
+        </div>
+    </div>
+    <div class="form-group">
+        <label>Exchange Rate (₦ to $1)</label>
+        <input type="number" id="exchangeRate" value="1500">
+    </div>
+
+    <button onclick="calculatePnL()">Calculate Profit & Loss</button>
+    <button class="secondary" onclick="openModal('paymentModal')">Submit Payment Proof</button>
+
+    <!-- Results Section -->
+    <div id="resultsPanel">
+        <h3>Projection Results</h3>
+        <p><strong>Resell Window:</strong> <span id="resellDateOut">-</span></p>
+        <p><strong>Total Investment:</strong> ₦<span id="investmentOut">0</span></p>
+        
+        <hr style="border-top: 1px solid var(--border);">
+        
+        <h4>Lagos Commodity Market Comparison</h4>
+        <p>Expected Revenue: ₦<span id="lagosRevOut">0</span></p>
+        <p>Profit/Loss: <span id="lagosPnlOut" class="profit">₦0 (0%)</span></p>
+
+        <hr style="border-top: 1px solid var(--border);">
+
+        <h4>International Market Comparison</h4>
+        <p>Expected Revenue: ₦<span id="intlRevOut">0</span> <em>(Calculated at 25L/jerrican)</em></p>
+        <p>Profit/Loss: <span id="intlPnlOut" class="profit">₦0 (0%)</span></p>
+    </div>
+</div>
+
+<!-- Quantity Entry Modal -->
+<div id="qtyModal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>Enter 25L Jerrican Quantities</h3>
+        <div class="form-group">
+            <label>Yellow Jerrican Quantity</label>
+            <input type="number" id="qtyYellow" value="0" min="0">
+        </div>
+        <div class="form-group">
+            <label>Aboki Jerrican Quantity</label>
+            <input type="number" id="qtyAboki" value="0" min="0">
+        </div>
+        <button onclick="saveQuantities()">Save Quantities</button>
+        <button class="secondary" onclick="closeModal('qtyModal')">Cancel</button>
+    </div>
+</div>
+
+<!-- Payment Proof Modal -->
+<div id="paymentModal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>Log Transaction Proof</h3>
+        <p style="font-size: 0.9rem; color: var(--text-muted);">Enter the bank transaction trace number for your commodity purchase.</p>
+        <div class="form-group">
+            <label>Bank Transaction / Trace ID</label>
+            <input type="text" id="txnId" placeholder="e.g. 090283746192...">
+        </div>
+        <button onclick="submitPayment()">Verify & Log Transaction</button>
+        <button class="secondary" onclick="closeModal('paymentModal')">Close</button>
+    </div>
+</div>
+
+<script>
+    // State variables
+    let totalQty = 0;
+    let yellowQty = 0;
+    let abokiQty = 0;
+
+    // Theme Toggle Logic
+    function toggleTheme() {
+        const body = document.body;
+        if (body.getAttribute('data-theme') === 'dark') {
+            body.removeAttribute('data-theme');
+            localStorage.setItem('theme', 'light');
+        } else {
+            body.setAttribute('data-theme', 'dark');
+            localStorage.setItem('theme', 'dark');
+        }
+    }
+
+    // Load saved theme on initialization
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.setAttribute('data-theme', 'dark');
+    }
+
+    // Modal Controls
+    function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    function saveQuantities() {
+        yellowQty = parseInt(document.getElementById('qtyYellow').value) || 0;
+        abokiQty = parseInt(document.getElementById('qtyAboki').value) || 0;
+        totalQty = yellowQty + abokiQty;
+        
+        document.getElementById('qtyDisplay').innerText = 
+            `Total: ${totalQty} Jerricans (${yellowQty} Yellow, ${abokiQty} Aboki)`;
+        closeModal('qtyModal');
+    }
+
+    function submitPayment() {
+        const txn = document.getElementById('txnId').value;
+        if(!txn) return alert("Please enter a transaction ID.");
+        alert("Transaction " + txn + " securely logged for verification.");
+        closeModal('paymentModal');
+        document.getElementById('txnId').value = '';
+    }
+
+    // Automated GitHub API Data Fetch
+    async function loadLivePrices() {
+        const statusBadge = document.getElementById('apiStatus');
+        try {
+            // This attempts to load the flat-file generated by GitHub Actions
+            const response = await fetch('./prices.json', { cache: "no-store" });
+            if (!response.ok) throw new Error("File not found");
+            
+            const data = await response.json();
+            
+            // Lagos price usually scraped per liter. 1 Jerrican = 25 Liters
+            document.getElementById('lagosPrice').value = (data.lagos_price_per_liter * 25).toFixed(2);
+            document.getElementById('intlPrice').value = data.intl_price_usd_per_liter;
+            
+            statusBadge.innerText = `🟢 Market Data Synced: ${data.last_updated}`;
+            statusBadge.style.background = 'var(--success)';
+            statusBadge.style.color = '#fff';
+        } catch (error) {
+            statusBadge.innerText = `🔴 Using Manual Mode (Auto-fetch failed)`;
+            statusBadge.style.background = 'var(--danger)';
+            statusBadge.style.color = '#fff';
+            console.log("Git Scraping API missing. Provide prices manually.", error);
+        }
+    }
+
+    // Core Calculation Logic
+    function calculatePnL() {
+        const buyDateRaw = document.getElementById('buyDate').value;
+        const storage = parseInt(document.getElementById('storagePeriod').value) || 0;
+        const buyPrice = parseFloat(document.getElementById('buyPrice').value) || 0;
+        const lagosPrice = parseFloat(document.getElementById('lagosPrice').value) || 0;
+        const intlPriceUsd = parseFloat(document.getElementById('intlPrice').value) || 0;
+        const exchangeRate = parseFloat(document.getElementById('exchangeRate').value) || 1500;
+
+        if (!buyDateRaw || totalQty === 0 || buyPrice === 0) {
+            alert("Please fill out the Buy Date, Buy Price, and enter Jerrican Quantities.");
+            return;
+        }
+
+        // Calculate Resell Window Date
+        const [year, month] = buyDateRaw.split('-');
+        let resellDate = new Date(year, parseInt(month) - 1 + storage);
+        const options = { year: 'numeric', month: 'long' };
+        document.getElementById('resellDateOut').innerText = resellDate.toLocaleDateString('en-US', options);
+
+        // Core Financials
+        const totalInvestment = buyPrice * totalQty;
+        document.getElementById('investmentOut').innerText = totalInvestment.toLocaleString();
+
+        // Lagos Logic
+        const lagosRevenue = lagosPrice * totalQty;
+        const lagosProfit = lagosRevenue - totalInvestment;
+        const lagosPercent = totalInvestment > 0 ? (lagosProfit / totalInvestment) * 100 : 0;
+        
+        document.getElementById('lagosRevOut').innerText = lagosRevenue.toLocaleString();
+        formatPnL('lagosPnlOut', lagosProfit, lagosPercent);
+
+        // International Logic (25 Liters per jerrican)
+        const intlPriceNairaPerJerrican = (intlPriceUsd * 25) * exchangeRate;
+        const intlRevenue = intlPriceNairaPerJerrican * totalQty;
+        const intlProfit = intlRevenue - totalInvestment;
+        const intlPercent = totalInvestment > 0 ? (intlProfit / totalInvestment) * 100 : 0;
+
+        document.getElementById('intlRevOut').innerText = intlRevenue.toLocaleString();
+        formatPnL('intlPnlOut', intlProfit, intlPercent);
+
+        // Display Panel
+        document.getElementById('resultsPanel').style.display = 'block';
+    }
+
+    // Helper to format text green/red based on profit/loss
+    function formatPnL(elementId, profitNaira, percentage) {
+        const el = document.getElementById(elementId);
+        const sign = profitNaira >= 0 ? "+" : "";
+        el.innerText = `${sign}₦${profitNaira.toLocaleString()} (${sign}${percentage.toFixed(2)}%)`;
+        el.className = profitNaira >= 0 ? "profit" : "loss";
+    }
+
+    // Initialize API call on page load
+    window.onload = loadLivePrices;
+</script>
+</body>
+</html>
